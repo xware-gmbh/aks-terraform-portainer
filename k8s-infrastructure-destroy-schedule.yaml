@@ -1,0 +1,44 @@
+trigger: none
+
+schedules:
+- cron: "0 0 * * *"
+  displayName: Daily midnight destroy of stages
+  branches:
+    include:
+    - master
+    - feature/*
+    - fix/*
+
+pool:
+  vmImage: 'ubuntu-20.04'
+
+variables:
+  - group: k8s_setup
+
+stages:
+- stage: DEV
+  jobs:
+  - job: DEV_setup_infrastructure
+    steps:
+    - script: |
+        terraform init \
+        -backend-config="storage_account_name=$(k8s_storage_account_name)" \
+        -backend-config="resource_group_name=$(k8s_resource_group_name)" \
+        -backend-config="container_name=$(k8s_container_name)" \
+        -backend-config="key=$(k8s_key)" \
+        -backend-config="subscription_id=$(k8s_subscription_id)" \
+        -backend-config="tenant_id=$(k8s_tenant_id)" \
+        -backend-config="client_id=$(k8s_client_id)" \
+        -backend-config="client_secret=$(k8s_client_secret)"
+      displayName: 'Terraform: init'
+    - script: |
+        ./workspacetest.sh $(System.StageName)
+      displayName: 'Terraform: check workspaces'
+    - script: |
+        terraform destroy -auto-approve
+      displayName: 'Terraform: destroy'
+      env:
+        ARM_SUBSCRIPTION_ID: $(k8s_subscription_id)
+        ARM_CLIENT_ID:       $(k8s_client_id)
+        ARM_CLIENT_SECRET:   $(k8s_client_secret)
+        ARM_TENANT_ID:       $(k8s_tenant_id)
