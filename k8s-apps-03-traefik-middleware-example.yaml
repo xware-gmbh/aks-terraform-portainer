@@ -1,0 +1,21 @@
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Content: Traefik 4 kubernetes ingress on AKS
+# Author: Jan Jambor, XWare GmbH
+# Author URI: https://xwr.ch
+# Date: 26.07.2021
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# # # # # # # # # # # # # # #
+# Middleware: 
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: ipwl-onlylocalip
+  namespace: ns-admin
+spec:
+  ipWhiteList:
+    sourceRange:
+      - 1.2.3.4/32 # your public IP to limit access to only that ip
+      - 127.0.0.1/32
