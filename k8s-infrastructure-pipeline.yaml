@@ -1,0 +1,176 @@
+---
+parameters:
+- name: stage
+  displayName: Stage
+  type: string
+  default: SCAN
+  values:
+  - SCAN
+  - DEV
+  - TST
+  - PRD
+
+trigger:
+  - master
+  - feature/*
+  - fix/*
+
+resources:
+  repositories:
+    - repository: ci-central
+      name: JJsProjects/CiCentral
+      type: git
+      ref: main
+
+pool:
+  vmImage: 'ubuntu-20.04'
+
+variables:
+  - group: k8s_setup
+
+stages:
+
+  - stage: SCAN
+    condition: in('${{ parameters.stage }}', 'SCAN')
+    jobs:
+    - job: SCAN
+      steps:
+        - template: ci-templates/sonarqube/sonarqube-prepare.yaml@ci-central
+          parameters:
+            context: ''
+            cliProjectKey: 'JJsProjects_k8s-setup_AYsn7QB4S2yyHmbITSLY'
+
+        - template: ci-templates/sonarqube/sonarqube-analyze-publish.yaml@ci-central
+
+  - stage: DEV
+    condition: in('${{ parameters.stage }}', 'DEV')
+    jobs:
+      - job: DEV_setup
+        steps:
+          - script: |
+              terraform init \
+              -backend-config="storage_account_name=$(k8s_storage_account_name)" \
+              -backend-config="resource_group_name=$(k8s_resource_group_name)" \
+              -backend-config="container_name=$(k8s_container_name)" \
+              -backend-config="key=$(k8s_key)" \
+              -backend-config="subscription_id=$(k8s_subscription_id)" \
+              -backend-config="tenant_id=$(k8s_tenant_id)" \
+              -backend-config="client_id=$(k8s_client_id)" \
+              -backend-config="client_secret=$(k8s_client_secret)"
+            displayName: 'Terraform: init'
+          - script: |
+              ./workspacetest.sh $(System.StageName)
+            displayName: 'Terraform: check workspaces'
+          - script: |
+              terraform plan \
+              -out out.plan
+            displayName: 'Terraform: plan'
+            env:
+              ARM_SUBSCRIPTION_ID: $(k8s_subscription_id)
+              ARM_CLIENT_ID:       $(k8s_client_id)
+              ARM_CLIENT_SECRET:   $(k8s_client_secret)
+              ARM_TENANT_ID:       $(k8s_tenant_id)
+          - script: |
+              terraform apply out.plan
+            displayName: 'Terraform: apply'
+            env:
+              ARM_SUBSCRIPTION_ID: $(k8s_subscription_id)
+              ARM_CLIENT_ID:       $(k8s_client_id)
+              ARM_CLIENT_SECRET:   $(k8s_client_secret)
+              ARM_TENANT_ID:       $(k8s_tenant_id)
+          - script: |
+              az login --service-principal --username $(k8s_client_id) --password $(k8s_client_secret) --tenant $(k8s_tenant_id)
+            displayName: 'Login to Azure with Service Principal'
+          - script: |
+              az aks get-credentials --resource-group DEV-rg-k8s-kstjj-001 --name k8s --overwrite-existing
+            displayName: 'Get cluster info'
+          - script: |
+              kubectl apply -f k8s-apps-01-namespace.yaml
+            displayName: 'Apply: namespace'
+          - script: |
+              kubectl config set-context --current --namespace=ns-admin
+            displayName: 'Apply: switch to namespace'
+          - script: |
+              kubectl apply -f k8s-apps-02-traefik.yaml
+            displayName: 'Apply: traefik'
+          - script: |
+              kubectl create namespace portainer --dry-run=client -o yaml | kubectl apply -f -
+            displayName: 'Apply: portainer add namespace'
+          - script: |
+              kubectl create secret generic portainer-agent-secret --from-literal=AGENT_SECRET=$(k8s_agent_secret) -n portainer --dry-run=client -o yaml | kubectl apply -f -
+            displayName: 'Apply: portainer add agent secrets'
+          - script: |
+              kubectl apply -f k8s-apps-04-portainer-agent.yaml
+            displayName: 'Apply: portainer agent'
+
+  - stage: TST
+    condition: or(eq(variables['Build.Reason'], 'PullRequest'), in('${{ parameters.stage }}', 'TST'))
+    jobs:
+      - job: TST_setup
+        steps:
+          - script: |
+              terraform init \
+              -backend-config="storage_account_name=$(k8s_storage_account_name)" \
+              -backend-config="resource_group_name=$(k8s_resource_group_name)" \
+              -backend-config="container_name=$(k8s_container_name)" \
+              -backend-config="key=$(k8s_key)" \
+              -backend-config="subscription_id=$(k8s_subscription_id)" \
+              -backend-config="tenant_id=$(k8s_tenant_id)" \
+              -backend-config="client_id=$(k8s_client_id)" \
+              -backend-config="client_secret=$(k8s_client_secret)"
+            displayName: 'Terraform: init'
+          - script: |
+              ./workspacetest.sh $(System.StageName)
+            displayName: 'Terraform: check workspaces'
+          - script: |
+              terraform plan \
+              -out out.plan
+            displayName: 'Terraform: plan'
+            env:
+              ARM_SUBSCRIPTION_ID: $(k8s_subscription_id)
+              ARM_CLIENT_ID:       $(k8s_client_id)
+              ARM_CLIENT_SECRET:   $(k8s_client_secret)
+              ARM_TENANT_ID:       $(k8s_tenant_id)
+          - script: |
+              terraform apply out.plan
+            displayName: 'Terraform: apply'
+            env:
+              ARM_SUBSCRIPTION_ID: $(k8s_subscription_id)
+              ARM_CLIENT_ID:       $(k8s_client_id)
+              ARM_CLIENT_SECRET:   $(k8s_client_secret)
+              ARM_TENANT_ID:       $(k8s_tenant_id)
+          - script: |
+              az login --service-principal --username $(k8s_client_id) --password $(k8s_client_secret) --tenant $(k8s_tenant_id)
+            displayName: 'Login to Azure with Service Principal'
+          - script: |
+              az aks get-credentials --resource-group TST-rg-k8s-kstjj-001 --name k8s --overwrite-existing
+            displayName: 'Get cluster info'
+          - script: |
+              kubectl apply -f k8s-apps-01-namespace.yaml
+            displayName: 'Apply: namespace'
+          - script: |
+              kubectl config set-context --current --namespace=ns-admin
+            displayName: 'Apply: switch to namespace'
+          - script: |
+              kubectl apply -f k8s-apps-02-traefik.yaml
+            displayName: 'Apply: traefik'
+          - script: |
+              kubectl create namespace portainer --dry-run=client -o yaml | kubectl apply -f -
+            displayName: 'Apply: portainer add namespace'
+          - script: |
+              kubectl create secret generic portainer-agent-secret --from-literal=AGENT_SECRET=$(k8s_agent_secret) -n portainer --dry-run=client -o yaml | kubectl apply -f -
+            displayName: 'Apply: portainer add agent secrets'
+          - script: |
+              kubectl apply -f k8s-apps-04-portainer-agent.yaml
+            displayName: 'Apply: portainer agent'
+
+  - stage: PRD
+    # Don't run automated builds on PRD, see: https://ochzhen.com/blog/manual-trigger-in-yaml-azure-pipelines
+    condition: and (eq(variables['Build.Reason'], 'Manual'), eq('${{ parameters.stage }}', 'PRD'))
+    jobs:
+      - job: PRD
+        steps:
+
+        - script: |
+            echo "not implemented yet"
+          displayName: 'not implemented'
