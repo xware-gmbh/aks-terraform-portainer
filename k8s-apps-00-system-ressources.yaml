@@ -1,0 +1,66 @@
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Content: System ressources
+# Author: Jan Jambor, XWare GmbH
+# Author URI: https://xwr.ch
+# Date: 05.08.2021
+#
+# This yaml manifest is not automatically applied by the pipeline.
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# # # # # # # # # # # # # # #
+# StorageClass: azurefile
+# https://kubernetes.io/docs/concepts/storage/storage-classes/#azure-file
+#
+# This has been adopted to meet the needs of modern more secure containers running with user 1000 instead of root.
+# These cannot access mounted volumes if the UID and GUID are not correctly set.
+#
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  labels:
+    addonmanager.kubernetes.io/mode: EnsureExists
+    kubernetes.io/cluster-service: "true"
+  name: azurefile
+provisioner: kubernetes.io/azure-file
+parameters:
+  skuName: Standard_LRS
+  #location: Azure storage account location. Default is empty.
+  #storageAccount: If a storage account is not provided, all storage accounts associated with the resource group are searched to find one that matches skuName and location. If a storage account is provided, it must reside in the same resource group as the cluster, and skuName and location are ignored.
+  #secretNamespace: the namespace of the secret that contains the Azure Storage Account Name and Key. Default is the same as the Pod.
+  #secretName: the name of the secret that contains the Azure Storage Account Name and Key. Default is azure-storage-account-<accountName>-secret
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+mountOptions:
+- mfsymlinks
+- actimeo=30
+- dir_mode=0777
+- file_mode=0777
+- uid=1000
+- gid=1000
+volumeBindingMode: Immediate
+
+# # # # # # # # # # # # # # #
+# StorageClass: default
+# https://kubernetes.io/docs/concepts/storage/storage-classes/#azure-unmanaged-disk-storage-class
+#
+# Thats the Azure standard created when the cluster is created. Unchanged, only for documentation reasons here.
+#
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    addonmanager.kubernetes.io/mode: EnsureExists
+    kubernetes.io/cluster-service: "true"
+  name: default
+provisioner: disk.csi.azure.com
+#provisioner: kubernetes.io/azure-disk
+parameters:
+  skuname: StandardSSD_LRS
+  #skuName: Standard_LRS
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
