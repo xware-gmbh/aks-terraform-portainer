@@ -1,0 +1,19 @@
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Content: Traefik 4 kubernetes ingress on AKS
+# Author: Jan Jambor, XWare GmbH
+# Author URI: https://xwr.ch
+# Date: 03.06.2021
+#
+# kubectl port-forward --address 0.0.0.0 service/traefik 9080:8080 9443:4443 -n ns-admin
+# http://127.0.0.1:9080/dashboard/#/
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# # # # # # # # # # # # # # #
+# namespace
+# kubectl config set-context --current --namespace=ns-admin
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-admin
