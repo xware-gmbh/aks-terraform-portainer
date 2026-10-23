@@ -1,0 +1,63 @@
+parameters:
+- name: stage
+  displayName: Stage
+  type: string
+  default: DEV
+  values:
+  - DEV
+  - TST
+  - PRD
+
+trigger:
+- none
+# - feature/*
+# - fix/*
+
+pool:
+  vmImage: 'ubuntu-20.04'
+
+variables:
+  - group: k8s_setup
+
+stages:
+- stage: DEV
+  condition: in('${{ parameters.stage }}', 'DEV')
+  jobs:
+  - job: DEV_setup
+    steps:
+    - script: |
+        az login --service-principal --username $(k8s_client_id) --password $(k8s_client_secret) --tenant $(k8s_tenant_id)
+      displayName: 'Login to Azure with Service Principal'
+    - script: |
+        az aks get-credentials --resource-group DEV-rg-k8s-kstjj-001 --name k8s --overwrite-existing
+      displayName: 'Get cluster info'
+    - script: |
+        kubectl create namespace portainer --dry-run=client -o yaml | kubectl apply -f -
+      displayName: 'Apply: portainer add namespace'
+    - script: |
+        kubectl create secret generic portainer-agent-secret --from-literal=AGENT_SECRET=$(k8s_agent_secret) -n portainer --dry-run=client -o yaml | kubectl apply -f -
+      displayName: 'Apply: portainer add agent secrets'
+    - script: |
+        kubectl apply -f k8s-apps-03-portainer-agent.yaml
+      displayName: 'Apply: portainer agent'
+
+- stage: TST
+  condition: or(eq(variables['Build.Reason'], 'PullRequest'), in('${{ parameters.stage }}', 'TST'))
+  jobs:
+  - job: TST_setup
+    steps:
+    - script: |
+        az login --service-principal --username $(k8s_client_id) --password $(k8s_client_secret) --tenant $(k8s_tenant_id)
+      displayName: 'Login to Azure with Service Principal'
+    - script: |
+        az aks get-credentials --resource-group TST-rg-k8s-kstjj-001 --name k8s --overwrite-existing
+      displayName: 'Get cluster info'
+    - script: |
+        kubectl create namespace portainer --dry-run=client -o yaml | kubectl apply -f -
+      displayName: 'Apply: portainer add namespace'
+    - script: |
+        kubectl create secret generic portainer-agent-secret --from-literal=AGENT_SECRET=$(k8s_agent_secret) -n portainer --dry-run=client -o yaml | kubectl apply -f -
+      displayName: 'Apply: portainer add agent secrets'
+    - script: |
+        kubectl apply -f k8s-apps-03-portainer-agent.yaml
+      displayName: 'Apply: portainer agent'
